@@ -1,4 +1,12 @@
+//author https://github.com/autergame
 #pragma once
+
+enum FrameDataType : uint8_t
+{
+	RotationType = 0,
+	TranslationType = 64,
+	ScaleType = 128
+};
 
 struct Boneanm
 {
@@ -17,7 +25,7 @@ struct Boneanm
 	using RotationFrame = Frame<glm::quat>;
 	using ScaleFrame = Frame<glm::vec3>;
 
-	uint32_t Hash;
+	uint32_t Hash = 0;
 
 	std::vector<TranslationFrame> Translation;
 	std::vector<RotationFrame> Rotation;
@@ -27,7 +35,7 @@ struct Boneanm
 class Animation
 {
 public:
-	float FPS, Duration;
+	float FPS = 0, Duration = 0;
 	std::vector<Boneanm> Bones;
 };
 
@@ -45,7 +53,7 @@ glm::quat UncompressQuaternion(const uint16_t& t_DominantAxis, const uint16_t& a
 	float fz = sqrt(2.0f) * ((int)a_Z - 16384) / 32768.0f;
 	float fw = sqrt(1.0f - fx * fx - fy * fy - fz * fz);
 
-	glm::quat uq;
+	glm::quat uq = glm::quat(0.f, 0.f, 0.f, 1.f);
 
 	switch (t_DominantAxis)
 	{
@@ -108,16 +116,17 @@ float UncompressTime(const uint16_t& a_CurrentTime, const float& a_AnimationLeng
 
 int openanm(Animation *myskin, const char* filename)
 {
-	FILE *fp;
-	fopen_s(&fp, filename, "rb");
-
 	uint32_t Offset = 0;
+	FILE *fp = fopen(filename, "rb");
+
 	char* Signature = (char*)calloc(9, sizeof(char));
 	fread(Signature, sizeof(uint8_t), 8, fp); Offset += 8;
 
 	if (memcmp(Signature, "r3d2anmd", 8) != 0 && memcmp(Signature, "r3d2canm", 8) != 0)
 	{
 		printf("anm has signature %s, which is not known by this application\n", Signature);
+		scanf("press enter to exit.");
+		fclose(fp);
 		return 1;
 	}
 
@@ -197,14 +206,6 @@ int openanm(Animation *myskin, const char* filename)
 
 		for (int i = 0; i < EntryCount; ++i)
 		{
-			enum FrameDataType : uint8_t
-			{
-				RotationType = 0,
-				TranslationType = 64,
-				ScaleType = 128
-			};
-			static_assert(sizeof(FrameDataType) == sizeof(uint8_t), "cannot use FrameDataType as a standin for uint8_t!");
-
 			uint16_t CompressedTime;
 			fread(&CompressedTime, sizeof(uint16_t), 1, fp);
 
@@ -281,7 +282,7 @@ int openanm(Animation *myskin, const char* filename)
 				BoneEntry.Scale.emplace_back(Time, Scale);
 			}
 
-			myskin->Bones.push_back(BoneEntry);
+			myskin->Bones.emplace_back(BoneEntry);
 		}
 	}
 	else if (Version == 3)
@@ -369,7 +370,7 @@ int openanm(Animation *myskin, const char* filename)
 			fread(&Vector.x, sizeof(float), 1, fp); Offset += 4;
 			fread(&Vector.y, sizeof(float), 1, fp); Offset += 4;
 			fread(&Vector.z, sizeof(float), 1, fp); Offset += 4;
-			TranslationOrScaleEntries.push_back(Vector);
+			TranslationOrScaleEntries.emplace_back(Vector);
 		}
 
 		Offset = RotationDataOffset;
@@ -382,13 +383,13 @@ int openanm(Animation *myskin, const char* filename)
 			fread(&RotationEntry.y, sizeof(float), 1, fp); Offset += 4;
 			fread(&RotationEntry.z, sizeof(float), 1, fp); Offset += 4;
 			fread(&RotationEntry.w, sizeof(float), 1, fp); Offset += 4;
-			RotationEntries.push_back(RotationEntry);
+			RotationEntries.emplace_back(RotationEntry);
 		}
 
 		Offset = FrameDataOffset;
 		fseek(fp, Offset, 0);
 
-		std::map<uint32_t, std::vector<FrameIndices>> BoneMap;
+		std::unordered_map<uint32_t, std::vector<FrameIndices>> BoneMap;
 		for (uint32_t i = 0; i < BoneCount; ++i)
 		{
 			for (uint32_t j = 0; j < FrameCount;++ j)
@@ -404,7 +405,7 @@ int openanm(Animation *myskin, const char* filename)
 				Offset += 2;
 				fseek(fp, Offset, 0);
 
-				BoneMap[BoneHash].push_back(FrameIndexData);
+				BoneMap[BoneHash].emplace_back(FrameIndexData);
 			}
 		}
 
@@ -423,7 +424,7 @@ int openanm(Animation *myskin, const char* filename)
 				CurrentTime += FrameDelay;
 			}
 
-			myskin->Bones.push_back(Bone);
+			myskin->Bones.emplace_back(Bone);
 		}
 	}
 	else if (Version == 5)
@@ -469,7 +470,7 @@ int openanm(Animation *myskin, const char* filename)
 		{
 			glm::vec3 translationEntry;
 			fread(&translationEntry, sizeof(uint8_t), 12, fp); Offset += 12;
-			Translations.push_back(translationEntry);
+			Translations.emplace_back(translationEntry);
 		}
 
 		std::vector<std::bitset<48>> RotationEntries;
@@ -483,7 +484,7 @@ int openanm(Animation *myskin, const char* filename)
 		{
 			std::bitset<48> RotationEntry;
 			fread(&RotationEntry, sizeof(uint8_t), 6, fp); Offset += 6;
-			RotationEntries.push_back(RotationEntry);
+			RotationEntries.emplace_back(RotationEntry);
 		}
 
 		Offset = HashesOffset;
@@ -534,10 +535,13 @@ int openanm(Animation *myskin, const char* filename)
 	else
 	{
 		printf("anm has an unsupported version: %d\n", Version);
+		scanf("press enter to exit.");
+		fclose(fp);
 		return 1;
 	}
 
 	printf("anm version %d was succesfully loaded: FPS: %f Duration: %f\n", Version, myskin->FPS, myskin->Duration);
+	fclose(fp);
 	return 0;
 }
 

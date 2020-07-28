@@ -1,3 +1,4 @@
+//author https://github.com/autergame
 #pragma once
 
 uint32_t FNV1Hash(const std::string& a_String)
@@ -5,34 +6,34 @@ uint32_t FNV1Hash(const std::string& a_String)
 	size_t Hash = 0x811c9dc5;
 	const char* Chars = a_String.c_str();
 	for (size_t i = 0; i < a_String.length(); i++)
-		Hash = ((Hash ^ tolower(Chars[i])) * 0x01000193) % 0x100000000;
+		Hash = (Hash ^ tolower(Chars[i])) * 0x01000193;
 	return Hash;
 }
 
 struct SubMeshHeader
 {
 	std::string Name = "";
-	uint32_t VertexOffset;
-	uint32_t VertexCount;
-	uint32_t IndexOffset;
-	uint32_t IndexCount;
+	uint32_t VertexOffset = 0;
+	uint32_t VertexCount = 0;
+	uint32_t IndexOffset = 0;
+	uint32_t IndexCount = 0;
 };
 
 struct Mesh
 {
-	GLuint texid;
+	GLuint texid = 0;
 	std::string Name;
-	uint32_t Hash;
-	uint16_t* Indices;
-	size_t IndexCount;
+	uint32_t Hash = 0;
+	uint16_t* Indices{0};
+	size_t IndexCount = 0;
 };
 
 class Skin
 {
 public:
-	uint16_t Major;
-	uint16_t Minor;
-	glm::vec3 center;
+	uint16_t Major = 0;
+	uint16_t Minor = 0;
+	glm::vec3 center = glm::vec3(0.f);
 	std::vector<glm::vec3> Positions;
 	std::vector<glm::vec2> UVs;
 	std::vector<glm::vec4> Weights;
@@ -43,15 +44,16 @@ public:
 
 int openskn(Skin *myskin, const char* filename)
 {
-	FILE *fp;
-	fopen_s(&fp, filename, "rb");
 	uint32_t Offset = 0;
+	FILE *fp = fopen(filename, "rb");
 
 	uint32_t Signature = 0;
 	fread(&Signature, sizeof(uint32_t), 1, fp); Offset += 4;
 	if (Signature != 0x00112233)
 	{
 		printf("skn has no valid signature\n");
+		scanf("press enter to exit.");
+		fclose(fp);
 		return 1;
 	}
 
@@ -59,11 +61,10 @@ int openskn(Skin *myskin, const char* filename)
 	fread(&myskin->Minor, sizeof(uint16_t), 1, fp); Offset += 2;
 
 	uint32_t SubMeshHeaderCount = 0;
-	fread(&SubMeshHeaderCount, sizeof(uint32_t), 1, fp); Offset += 4;
-
 	std::vector<SubMeshHeader> SubMeshHeaders;
 	if (myskin->Major > 0)
 	{
+		fread(&SubMeshHeaderCount, sizeof(uint32_t), 1, fp); Offset += 4;
 		for (uint32_t i = 0; i < SubMeshHeaderCount; i++)
 		{
 			SubMeshHeader Mesh;
@@ -77,7 +78,7 @@ int openskn(Skin *myskin, const char* filename)
 			fread(&Mesh.IndexOffset, sizeof(uint32_t), 1, fp); Offset += 4;
 			fread(&Mesh.IndexCount, sizeof(uint32_t), 1, fp); Offset += 4;
 
-			SubMeshHeaders.push_back(Mesh);
+			SubMeshHeaders.emplace_back(Mesh);
 		}
 	}
 
@@ -163,21 +164,33 @@ int openskn(Skin *myskin, const char* filename)
 		if (WeightError > 0.02f)
 		{
 			printf("WeightError\n");
+			scanf("press enter to exit.");
+			fclose(fp);
 			return 1;
 		}
 	}
 
-	myskin->Meshes.resize(SubMeshHeaderCount);
-	for (uint32_t i = 0; i < SubMeshHeaderCount; i++)
+	if (SubMeshHeaderCount > 0)
 	{
-		myskin->Meshes[i].Name = SubMeshHeaders[i].Name;
-		myskin->Meshes[i].Hash = FNV1Hash(SubMeshHeaders[i].Name);
+		myskin->Meshes.resize(SubMeshHeaderCount);
+		for (uint32_t i = 0; i < SubMeshHeaderCount; i++)
+		{
+			myskin->Meshes[i].Name = SubMeshHeaders[i].Name;
+			myskin->Meshes[i].Hash = FNV1Hash(SubMeshHeaders[i].Name);
 
-		myskin->Meshes[i].IndexCount = SubMeshHeaders[i].IndexCount;
-		myskin->Meshes[i].Indices = &myskin->Indices[SubMeshHeaders[i].IndexOffset];
+			myskin->Meshes[i].IndexCount = SubMeshHeaders[i].IndexCount;
+			myskin->Meshes[i].Indices = &myskin->Indices[SubMeshHeaders[i].IndexOffset];
+		}
+	}
+	else
+	{
+		myskin->Meshes.resize(1);
+		myskin->Meshes[0].IndexCount = IndexCount;
+		myskin->Meshes[0].Indices = &myskin->Indices[0];
 	}
 
 	printf("skn version %u %u was succesfully loaded: SubMeshHeaderCount: %d IndexCount: %d VertexCount: %d\n",
 		myskin->Major, myskin->Minor, SubMeshHeaderCount, IndexCount, VertexCount);
+	fclose(fp);
 	return 0;
 }
